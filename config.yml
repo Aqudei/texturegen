@@ -1,0 +1,6 @@
+# No need to reverse the slash
+# Just copy paste the location here
+directories:
+  - C:\Users\Dell\Downloads\Compressed\Masks Options
+monitor: C:/FG_Stuff/Hot
+masks: C:/FG_Stuff/Masks/
