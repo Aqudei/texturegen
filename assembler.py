@@ -344,6 +344,12 @@ class Assembler(object):
             if not part_num in [0, 1, 2]:
                 logger.warning(f"Skipping: {part_name}:{part_num}")
                 continue
+            # Skip HI and SHADE
+
+            if part_name.endswith('Layer1') or part_name.endswith('Layer2'):
+                logger.warning(f"Skipping HI/SHADE: {part_name}:{part_num}")
+                continue
+
             mask_path = os.path.join(self.mask_directory, f"{part_name}.png")
             if not os.path.isfile(mask_path):
                 logger.warning(f"'{mask_path}' does not exists!")
