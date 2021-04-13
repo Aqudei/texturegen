@@ -6,6 +6,11 @@ import tempfile
 import shutil
 import argparse
 import time
+import logging
+
+FORMAT = '%(asctime)-15s %(message)s'
+logging.basicConfig(format=FORMAT, level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class PartColorsNotFound(Exception):
@@ -39,13 +44,13 @@ class Assembler(object):
 
     def __init__(self, mask_directory, sav_file=None):
 
-        print('Creating temporary @ directory {}'.format(self.TEMP_DIR))
+        logger.info('Creating temporary @ directory {}'.format(self.TEMP_DIR))
         ensure_directory(self.TEMP_DIR)
 
         self.mask_directory = mask_directory
         self.data_file = sav_file
 
-        print('reading json data file...')
+        logger.info('reading json data file...')
         with open(self.data_file, 'rt') as fp:
             json_data = json.loads(fp.read())
             json_data = json_data[0]
@@ -56,7 +61,7 @@ class Assembler(object):
                 self.active_tabs = json_data['activeTabs']
 
             if not self.part_colors or not self.active_tabs:
-                print('active tabs/part colors missing from json data')
+                logger.info('active tabs/part colors missing from json data')
                 return
 
             if not self.part_colors:
@@ -111,8 +116,9 @@ class Assembler(object):
 
     def _apply_color_to_pngs(self):
 
-        print('Emptying temporary files: {}'.format(self.TEMP_DIR))
-        print('Applying colors to masks using data file: {}'.format(self.data_file))
+        logger.info('Emptying temporary files: {}'.format(self.TEMP_DIR))
+        logger.info(
+            'Applying colors to masks using data file: {}'.format(self.data_file))
         empty_directory(self.TEMP_DIR)
         for mask in sorted([k for k in self.masks.keys() if k]):
             mask_path, mask_name, mask_bytes = self.masks[mask]
@@ -121,7 +127,7 @@ class Assembler(object):
                 continue
 
             if not mask_name:
-                print('skipping unknown mask file (mask name is None)')
+                logger.info('skipping unknown mask file (mask name is None)')
                 continue
 
             if self.__is_tatoo(mask_name):
@@ -139,7 +145,7 @@ class Assembler(object):
                 try:
                     color = self.part_colors[mask_name]
                 except KeyError:
-                    print(
+                    logger.info(
                         'No color info found for part <{}>. I will be using WHITE.'.format(mask_name))
                     color = {
                         "r": 1,
@@ -165,7 +171,7 @@ class Assembler(object):
 
             new.save(os.path.join(self.TEMP_DIR, tail))
 
-        print('Done applying colors')
+        logger.info('Done applying colors')
 
     def _locate_mask(self, part_name):
         return self.masks[part_name]
@@ -176,7 +182,8 @@ class Assembler(object):
         return mbytes.size
 
     def _merge(self):
-        print('Merging all image part from : {} to a single PNG.'.format(self.TEMP_DIR))
+        logger.info(
+            'Merging all image part from : {} to a single PNG.'.format(self.TEMP_DIR))
         current_image = Image.new('RGB', self._get_current_size())
 
         # gloss_layer_path = None
@@ -192,13 +199,13 @@ class Assembler(object):
                     # gloss_layer_mask_name = self._get_part_name(f)
                     continue
 
-                print("Merging {}".format(part_name))
+                logger.info("Merging {}".format(part_name))
                 im = Image.open(layer_path)
                 mask_path, mask_name, mask_bytes = self.masks[part_name]
                 current_image.paste(im, None, mask_bytes)
 
         # if gloss_layer_path and gloss_layer_mask_name:
-        #     print('Applying gloss: ' + gloss_layer_path)
+        #     logger.info('Applying gloss: ' + gloss_layer_path)
         #     white = Image.new('L', self._get_current_size(), 255)
         #     gloss_mask_path, gloss_mask_name,  gloss_mask_bytes = self.masks[
         #         gloss_layer_mask_name]
@@ -207,14 +214,14 @@ class Assembler(object):
         #     current_image.paste(white, None, gloss_mask_bytes)
         # else:
         #     if not gloss_layer_path:
-        #         print('No Gloss part found')
+        #         logger.info('No Gloss part found')
 
         #     if not gloss_layer_mask_name:
-        #         print('No Gloss mask part found')
+        #         logger.info('No Gloss mask part found')
 
         #fname, ext = os.path.splitext(self.data_file)
         #output = os.path.join(fname + '.png')
-        #print('Saving final output png to: {}'.format(output))
+        #logger.info('Saving final output png to: {}'.format(output))
         # current_image.save(output)
         return current_image
 
@@ -246,10 +253,11 @@ class Assembler(object):
     def _apply_mask_options(self, current_image):
 
         if not self.active_tabs:
-            print('Unable to apply mask options. No values for activeTabs found.')
+            logger.info(
+                'Unable to apply mask options. No values for activeTabs found.')
             return current_image
 
-        print('Applying Mask Options')
+        logger.info('Applying Mask Options')
         for option_name in self.active_tabs.keys():
             option_value = self.active_tabs.get(option_name, 0)
             if option_value == 0:
@@ -259,18 +267,18 @@ class Assembler(object):
                 option_name, option_value)
 
             if not mask_option_bytes:
-                print('No mask found for {}.{}.png'.format(
+                logger.warning('No mask found for {}.{}.png'.format(
                     option_name, option_value))
                 continue
 
             if not option_name in self.part_colors:
-                print('No color information found for {}.{}.png'.format(
+                logger.warning('No color information found for {}.{}.png'.format(
                     option_name, option_value))
                 continue
 
-            print('Mask option found for {}.{}.png'.format(
+            logger.info('Mask option found for {}.{}.png'.format(
                 option_name, option_value))
-            print('Applying...')
+            logger.info('Applying...')
             red = int(self.part_colors[option_name]['r'] * 255)
             green = int(self.part_colors[option_name]['g'] * 255)
             blue = int(self.part_colors[option_name]['b'] * 255)
@@ -282,7 +290,7 @@ class Assembler(object):
     def _apply_gloss(self, current_image):
         gloss_layer_mask_name, gloss_layer_path = (None, None)
 
-        print('Trying to look for a gloss file')
+        logger.info('Looking for a gloss file')
         for root, dirs, files in os.walk(self.mask_directory):
             for f in files:
 
@@ -296,14 +304,14 @@ class Assembler(object):
                     continue
 
                 if 'gloss' in part_name.lower():
-                    print('Gloss image found!')
+                    logger.info(f'Gloss image found at path {layer_path}!')
                     gloss_layer_path = layer_path
                     gloss_layer_mask_name = self._get_part_name(f)
                     break
             break
 
         if gloss_layer_path and gloss_layer_mask_name:
-            print('Applying gloss: ' + gloss_layer_path)
+            logger.info('Applying gloss: ' + gloss_layer_path)
             white = Image.new('L', self._get_current_size(), 255)
             gloss_mask_path, gloss_mask_name, gloss_mask_bytes = self.masks[
                 gloss_layer_mask_name]
@@ -312,17 +320,73 @@ class Assembler(object):
             current_image.paste(white, None, gloss_mask_bytes)
         else:
             if not gloss_layer_path:
-                print('No Gloss part found')
+                logger.info('No Gloss part found')
 
             if not gloss_layer_mask_name:
-                print('No Gloss mask part found')
+                logger.info('No Gloss mask part found')
 
         return current_image
 
+    def _gen_mask_pngs(self):
+        """
+        docstring
+        """
+        logger.info("Generating PNGs for Matte, Glossy, and, Metallic masks...")
+
+        tab0_matte = None
+        tab1_glossy = None
+        tab2_metallic = None
+
+        for part_name in self.active_tabs:
+            part_num = self.active_tabs[part_name]
+
+            # Skip other parts that 0,1,2
+            if not part_num in [0, 1, 2]:
+                logger.warning(f"Skipping: {part_name}:{part_num}")
+                continue
+            mask_path = os.path.join(self.mask_directory, f"{part_name}.png")
+            if not os.path.isfile(mask_path):
+                logger.warning(f"'{mask_path}' does not exists!")
+                continue
+
+            part_byte = Image.open(mask_path).convert('L')
+            white = Image.new('L', part_byte.size, 255)
+
+            if part_num == 0:
+                if not tab0_matte:
+                    tab0_matte = Image.new(
+                        'RGB', part_byte.size, (0, 0, 0))
+
+                tab0_matte.paste(white, None, part_byte)
+            if part_num == 1:
+                if not tab1_glossy:
+                    tab1_glossy = Image.new(
+                        'RGB', part_byte.size, (0, 0, 0))
+
+                tab1_glossy.paste(white, None, part_byte)
+            if part_num == 2:
+                if not tab2_metallic:
+                    tab2_metallic = Image.new(
+                        'RGB', part_byte.size, (0, 0, 0))
+
+                tab2_metallic.paste(white, None, part_byte)
+
+        fn, ext = os.path.splitext(self.data_file)
+
+        if tab0_matte:
+            tab0_matte.save(f"{fn}-tab0_matte.png")
+            logger.info(f"Png saved to {fn}-tab0_matte.png")
+        if tab1_glossy:
+            tab1_glossy.save(f"{fn}-tab1_glossy.png")
+            logger.info(f"Png saved to {fn}-tab1_glossy.png")
+        if tab2_metallic:
+            tab2_metallic.save(f"{fn}-tab2_metallic.png")
+            logger.info(f"Png saved to {fn}-tab2_metallic.png")
+
     def assemble(self):
-        print('PNG assebling started.')
-        print('Using masks directory: {}'.format(self.mask_directory))
-        print('Using temporary directory: {}'.format(
+        logger.info('PNG assebling started.')
+        logger.info('Using masks directory: {}'.format(self.mask_directory))
+        logger.info('Using temporary directory: {}'.format(
             os.path.abspath(self.TEMP_DIR)))
 
         self._apply_color_to_pngs()
@@ -333,8 +397,11 @@ class Assembler(object):
 
         fname, ext = os.path.splitext(self.data_file)
         output = os.path.join(fname + '.png')
-        print('Saving final output png to: {}'.format(output))
+        logger.info('Saving final output png to: {}'.format(output))
         current_image.save(output)
+
+        self._gen_mask_pngs()
+
         return output
 
 
@@ -344,10 +411,10 @@ if __name__ == "__main__":
     parser.add_argument('mask')
     options = parser.parse_args()
 
-    print(
+    logger.info(
         f'Processing {options.savfile} using mask directory {options.mask}')
     assembler = Assembler(options.mask, sav_file=options.savfile)
     tick = time.perf_counter()
     assembler.assemble()
-    print(
+    logger.info(
         f"It took a total of {(time.perf_counter() - tick)} seconds to generate Color texture.")
